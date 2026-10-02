@@ -120,10 +120,13 @@ kbd {
 /* ---------- preset tabs ---------- */
 
 .presets {
+  margin-bottom: 16px;
+}
+
+.preset-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 16px;
 }
 
 .preset-tab {
@@ -254,6 +257,12 @@ kbd {
   background: var(--accent-soft);
 }
 
+/* The accent tint darkens the card enough that the muted label drops to
+   4.3:1 there, so lift it to the accent colour while the card is armed. */
+.nextcue.is-next .nextcue-label {
+  color: var(--accent);
+}
+
 /* ---------- progress ---------- */
 
 .progress {
@@ -345,12 +354,60 @@ kbd {
 }
 
 .cues-title {
-  margin: 0 0 10px;
+  margin: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
+}
+
+.cues-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.link-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.link-btn:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.link-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.link-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.preset-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
 }
 
 .cue-list {
@@ -434,6 +491,82 @@ kbd {
   font-size: 14px;
 }
 
+/* ---------- cue editor ---------- */
+
+.edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-sm {
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.edit-hint {
+  margin: 0 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cue-edit {
+  grid-template-columns: 84px 1fr 88px 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.cue-t-input,
+.cue-text-input,
+.cue-sound-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.cue-t-input,
+.cue-sound-input {
+  font-family: "Consolas", "SF Mono", "Roboto Mono", ui-monospace, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cue-t-input:focus,
+.cue-text-input:focus,
+.cue-sound-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.cue-del {
+  min-height: 40px;
+  width: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.cue-del:hover {
+  border-color: var(--cue);
+  color: var(--cue);
+}
+
 @keyframes cue-pulse {
   from {
     background: rgba(99, 214, 164, 0.34);
@@ -505,6 +638,35 @@ kbd {
 
   .cue-sound {
     display: none;
+  }
+
+  /* The editor needs more room than a display row: give the sound picker
+     its own line rather than squeezing four fields into one. */
+  .cue-edit {
+    grid-template-columns: 76px 1fr 34px;
+    grid-template-areas:
+      "time text del"
+      "sound sound sound";
+  }
+
+  .cue-t-input {
+    grid-area: time;
+  }
+
+  .cue-text-input {
+    grid-area: text;
+  }
+
+  .cue-sound-input {
+    grid-area: sound;
+  }
+
+  .cue-del {
+    grid-area: del;
+  }
+
+  .edit-hint {
+    margin-left: 0;
   }
 }
 

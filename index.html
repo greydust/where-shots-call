@@ -29,7 +29,11 @@
         </button>
       </header>
 
-      <nav class="presets" id="presetTabs" role="tablist" aria-label="Boss presets"></nav>
+      <!-- The nav stays a navigation landmark; role="tablist" goes on the inner
+             element so overriding the role doesn't strip the landmark. -->
+      <nav class="presets" aria-label="Boss presets">
+        <div class="preset-tabs" id="presetTabs" role="tablist"></div>
+      </nav>
 
       <main class="stage">
         <div class="clock">
@@ -75,8 +79,16 @@
       </main>
 
       <section class="cues" aria-labelledby="cuesTitle">
-        <h2 class="cues-title" id="cuesTitle">Cues</h2>
+        <div class="cues-head">
+          <h2 class="cues-title" id="cuesTitle">Cues</h2>
+          <button id="editBtn" class="link-btn" type="button" aria-pressed="false">Edit</button>
+        </div>
         <ol class="cue-list" id="cueList"></ol>
+        <div class="edit-bar" id="editBar" hidden>
+          <button class="btn btn-sm" type="button" id="addCueBtn">Add cue</button>
+          <button class="btn btn-sm" type="button" id="resetPresetBtn">Reset preset</button>
+          <p class="edit-hint">Saved in this browser only.</p>
+        </div>
         <p class="cue-note" id="cueNote" hidden></p>
       </section>
 
