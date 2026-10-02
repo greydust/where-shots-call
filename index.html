@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#11131a" />
+    <meta
+      name="description"
+      content="A boss mechanic cue timer for Where Winds Meet. Run a countdown, get a highlighted reminder and a sound on every cue."
+    />
+    <title>Where Shots Call</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <h1>Where Shots Call</h1>
+        </div>
+        <button
+          id="soundToggle"
+          class="icon-btn"
+          type="button"
+          aria-pressed="false"
+          title="Mute cue sounds (M)"
+        >
+          <span class="icon-btn-label" id="soundToggleLabel">Sound on</span>
+        </button>
+      </header>
+
+      <nav class="presets" id="presetTabs" role="tablist" aria-label="Boss presets"></nav>
+
+      <main class="stage">
+        <div class="clock">
+          <div class="clock-time" id="clock">0:00.0</div>
+          <div class="clock-state" id="clockState">Ready</div>
+        </div>
+
+        <div class="nextcue" id="nextCue" data-empty="true">
+          <div class="nextcue-row">
+            <span class="nextcue-label">Next</span>
+            <span class="nextcue-text" id="nextCueText" aria-live="assertive">—</span>
+          </div>
+          <span class="nextcue-in" id="nextCueIn"></span>
+        </div>
+
+        <div
+          class="progress"
+          role="progressbar"
+          aria-label="Timer progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+          id="progress"
+        >
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div class="controls">
+          <button id="toggleBtn" class="btn btn-primary" type="button">Start</button>
+          <button id="resetBtn" class="btn" type="button">Reset</button>
+        </div>
+
+        <div class="nudges" role="group" aria-label="Adjust timer">
+          <button class="btn btn-nudge" type="button" data-delta="-10">&minus;10s</button>
+          <button class="btn btn-nudge" type="button" data-delta="-1">&minus;1s</button>
+          <button class="btn btn-nudge" type="button" data-delta="-0.5">&minus;0.5s</button>
+          <button class="btn btn-nudge" type="button" data-delta="0.5">+0.5s</button>
+          <button class="btn btn-nudge" type="button" data-delta="1">+1s</button>
+          <button class="btn btn-nudge" type="button" data-delta="10">+10s</button>
+        </div>
+      </main>
+
+      <section class="cues" aria-labelledby="cuesTitle">
+        <h2 class="cues-title" id="cuesTitle">Cues</h2>
+        <ol class="cue-list" id="cueList"></ol>
+        <p class="cue-note" id="cueNote" hidden></p>
+      </section>
+
+      <footer class="keys">
+        <span><kbd>Space</kbd> start / pause</span>
+        <span><kbd>R</kbd> reset</span>
+        <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> &plusmn;1s</span>
+        <span><kbd>Shift</kbd>+<kbd>&uarr;</kbd><kbd>&darr;</kbd> &plusmn;10s</span>
+        <span><kbd>Alt</kbd>+<kbd>&uarr;</kbd><kbd>&darr;</kbd> &plusmn;0.5s</span>
+        <span><kbd>M</kbd> mute</span>
+        <span><kbd>1</kbd>&ndash;<kbd>9</kbd> preset</span>
+      </footer>
+    </div>
+
+    <noscript>
+      <p class="noscript">This timer needs JavaScript.</p>
+    </noscript>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
