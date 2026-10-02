@@ -62,13 +62,15 @@
           <button id="resetBtn" class="btn" type="button">Reset</button>
         </div>
 
+        <!-- Order matters: this is a 3-column grid, so each column ends up
+             holding one magnitude pair (-10 over +10, -1 over +1, ...). -->
         <div class="nudges" role="group" aria-label="Adjust timer">
           <button class="btn btn-nudge" type="button" data-delta="-10">&minus;10s</button>
           <button class="btn btn-nudge" type="button" data-delta="-1">&minus;1s</button>
           <button class="btn btn-nudge" type="button" data-delta="-0.5">&minus;0.5s</button>
-          <button class="btn btn-nudge" type="button" data-delta="0.5">+0.5s</button>
-          <button class="btn btn-nudge" type="button" data-delta="1">+1s</button>
           <button class="btn btn-nudge" type="button" data-delta="10">+10s</button>
+          <button class="btn btn-nudge" type="button" data-delta="1">+1s</button>
+          <button class="btn btn-nudge" type="button" data-delta="0.5">+0.5s</button>
         </div>
       </main>
 

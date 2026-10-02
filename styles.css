@@ -323,10 +323,12 @@ kbd {
   background: #e5c684;
 }
 
+/* Three magnitude pairs. The smaller row gap binds -10 to +10 etc., while the
+   wider column gap keeps neighbouring pairs visually separate. */
 .nudges {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 6px 10px;
   margin-top: 10px;
 }
 
