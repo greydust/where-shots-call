@@ -31,6 +31,9 @@ export const PRESETS = [
       { t: 10, text: 'Start', sound: 'chime' },
       { t: 27, text: 'Deflect', sound: 'thud' },
       { t: 28, text: 'Green 1', sound: 'alert' },
+      { t: 40, text: 'Shield 1', sound: 'alert' },
+      { t: 43, text: 'Cleanse 1', sound: 'alert' },
+      { t: 53, text: 'Deflect', sound: 'thud' },
     ],
   },
   {
