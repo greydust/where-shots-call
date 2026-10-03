@@ -19,6 +19,21 @@ const STORE_KEY = 'wsc.presets';
 /** Seconds between two auto-added cues. */
 const NEW_CUE_GAP = 5;
 
+/**
+ * How far ahead cue sounds are scheduled on the audio clock.
+ *
+ * Cue sounds used to fire straight from a setInterval, so a backgrounded tab
+ * delayed them by however hard the browser was throttling timers -- up to a
+ * minute once Chrome's intensive throttling kicks in. Sounds are now queued on
+ * the AudioContext clock instead, which runs on its own thread and keeps
+ * real time regardless of page visibility, so they land on the second. The
+ * interval is only responsible for topping the queue up.
+ */
+const AUDIO_LOOKAHEAD = 120;
+
+/** Volume the synth runs at when sound is not muted. */
+const MASTER_GAIN = 0.5;
+
 /** Hold this long before nudge buttons start auto-repeating. */
 const HOLD_DELAY_MS = 420;
 const HOLD_REPEAT_MS = 90;
@@ -208,13 +223,31 @@ const audio = {
       if (!Ctor) return null;
       this.ctx = new Ctor();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = muted ? 0 : MASTER_GAIN;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
     return this.ctx;
   },
+
+  /**
+   * Mute by dropping the master gain rather than skipping playback, so sounds
+   * already queued on the audio clock stay queued and play as soon as you
+   * unmute.
+   */
+  setVolume(level) {
+    if (!this.master) return;
+    const now = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setTargetAtTime(level, now, 0.01);
+  },
 };
+
+/**
+ * Nodes created by the sound currently being scheduled, so a queued cue can be
+ * cancelled later (a rewind must not leave a beep pending).
+ */
+let capturing = null;
 
 /**
  * One enveloped oscillator voice.
@@ -244,44 +277,47 @@ function voice({
   osc.connect(amp).connect(audio.master);
   osc.start(t0);
   osc.stop(t0 + dur + 0.05);
+
+  const handle = { osc, amp, endsAt: t0 + dur + 0.05 };
+  if (capturing) capturing.push(handle);
+  return handle;
 }
 
 /** Synth cues. Keys match the `sound` field in data/presets.js. */
 const SOUNDS = {
   /** Bright two-partial bell. Good default for "the fight starts". */
-  chime(ctx) {
-    voice({ freq: 880, dur: 0.9, gain: 0.26 });
-    voice({ freq: 880 * 2.76, dur: 0.45, gain: 0.07 });
+  chime(ctx, delay = 0) {
+    voice({ freq: 880, delay, dur: 0.9, gain: 0.26 });
+    voice({ freq: 880 * 2.76, delay, dur: 0.45, gain: 0.07 });
   },
 
   /** Three urgent blips. Use when reacting is time-critical. */
-  alert(ctx) {
-    [0, 0.14, 0.28].forEach((delay, i) => {
-      voice({ type: 'square', freq: 720 + i * 180, delay, dur: 0.11, gain: 0.2 });
+  alert(ctx, delay = 0) {
+    [0, 0.14, 0.28].forEach((offset, i) => {
+      voice({ type: 'square', freq: 720 + i * 180, delay: delay + offset, dur: 0.11, gain: 0.2 });
     });
   },
 
   /** Low impact with a pitch drop. Use for deflects and slams. */
-  thud(ctx) {
-    voice({ freq: 130, glideTo: 52, dur: 0.5, gain: 0.4 });
-    voice({ type: 'triangle', freq: 190, glideTo: 70, dur: 0.22, gain: 0.12 });
+  thud(ctx, delay = 0) {
+    voice({ freq: 130, glideTo: 52, delay, dur: 0.5, gain: 0.4 });
+    voice({ type: 'triangle', freq: 190, glideTo: 70, delay, dur: 0.22, gain: 0.12 });
   },
 
   /** Short dry click. */
-  tick(ctx) {
-    voice({ type: 'square', freq: 1500, dur: 0.035, gain: 0.16 });
+  tick(ctx, delay = 0) {
+    voice({ type: 'square', freq: 1500, delay, dur: 0.035, gain: 0.16 });
   },
 
   /** Rising arpeggio. Use for a phase change or a kill. */
-  fanfare(ctx) {
+  fanfare(ctx, delay = 0) {
     [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-      voice({ freq, delay: i * 0.1, dur: 0.34, gain: 0.22 });
+      voice({ freq, delay: delay + i * 0.1, dur: 0.34, gain: 0.22 });
     });
   },
 };
 
 function playSound(name) {
-  if (muted) return;
   try {
     const ctx = audio.unlock();
     if (!ctx) return;
@@ -297,13 +333,70 @@ function playSound(name) {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Cue sounds queued on the audio clock: cue id -> node handles.
+ *
+ * Only ever topped up forward. Anything that moves the clock (nudge, pause,
+ * reset) throws the queue away and rebuilds it, so a queued beep can never
+ * survive into a position where it no longer belongs.
+ */
+const queued = new Map();
+
+/** Cancel every queued sound that has not played yet. */
+function cancelQueued() {
+  for (const handles of queued.values()) {
+    for (const { osc } of handles) {
+      try {
+        osc.stop();
+      } catch {
+        // Already stopped or never started; nothing to do.
+      }
+    }
+  }
+  queued.clear();
+}
+
+/**
+ * Queue any cue falling inside the lookahead window onto the audio clock.
+ *
+ * Called from the timer tick, so it only needs to stay roughly ahead of play
+ * time -- the precision comes from the audio clock, not from when we get here.
+ */
+function queueUpcomingCues(cur) {
+  if (!running) return;
+  const ctx = audio.unlock();
+  if (!ctx) return;
+
+  const cues = cueList();
+  const horizon = cur + AUDIO_LOOKAHEAD;
+
+  // Forget cues whose sound has already played, so they can queue again on a
+  // later pass through the same timestamp.
+  for (const [id, handles] of queued) {
+    if (handles.every((h) => h.endsAt <= ctx.currentTime)) queued.delete(id);
+  }
+
+  for (const cue of cues) {
+    if (queued.has(cue.id) || fired.has(cue.id)) continue;
+    if (cue.t > horizon) continue;
+
+    capturing = [];
+    try {
+      (SOUNDS[cue.sound] ?? SOUNDS[DEFAULT_SOUND])(ctx, cue.t - cur);
+    } finally {
+      queued.set(cue.id, capturing ?? []);
+      capturing = null;
+    }
+  }
+}
+
+/**
  * Fire every un-fired cue in the half-open range (processed, until].
  * This makes a forward nudge ring the cues it skipped over, and lets a cue
  * at 0:00 fire on the first tick after a reset.
  *
- * When several cues come due at once -- a long gap because the window was
- * unfocused, or a big forward nudge -- they all highlight but only the most
- * recent one sounds, so catching up never turns into a burst of noise.
+ * Highlight timing follows the timer, so it can lag while the tab is
+ * backgrounded -- unavoidable, since nothing is being painted. The sound does
+ * not: it is already queued on the audio clock.
  */
 function processCrossings(until, now) {
   const hits = [];
@@ -317,13 +410,23 @@ function processCrossings(until, now) {
   processed = Math.max(processed, until);
 
   if (!hits.length) return;
+  // Only the most recent one rings. Anything older was already queued on the
+  // audio clock and will have sounded on time, so catching up after a long
+  // stall never turns into a burst of noise.
   for (const cue of hits) announce(cue, now, cue === hits[hits.length - 1]);
 }
 
 function announce(cue, now, withSound) {
   firedAt.set(cue.id, now);
+
+  // Fall back to playing immediately only if this cue never made it onto the
+  // audio clock -- otherwise it is already queued and playing it here would
+  // double it up.
+  const wasQueued = queued.has(cue.id);
+  queued.delete(cue.id);
+
   if (withSound) {
-    playSound(cue.sound);
+    if (!wasQueued) playSound(cue.sound);
     if (navigator.vibrate) navigator.vibrate(45);
 
     // Restart the border flash animation.
@@ -361,6 +464,7 @@ function pause() {
   elapsed = current();
   running = false;
   processed = elapsed;
+  cancelQueued(); // nothing should beep after you stop
   tick(performance.now());
 }
 
@@ -375,6 +479,7 @@ function reset() {
   processed = 0;
   fired.clear();
   firedAt.clear();
+  cancelQueued();
   render(0, performance.now());
 }
 
@@ -397,6 +502,10 @@ function nudge(delta) {
     processCrossings(elapsed, now);
   }
 
+  // Every queued beep was placed relative to the old position, so drop the
+  // lot and let the next tick re-queue from here.
+  cancelQueued();
+  queueUpcomingCues(elapsed);
   render(elapsed, now);
 }
 
@@ -440,6 +549,24 @@ function render(cur, now) {
     const active = (firedAt.get(cue.id) ?? -Infinity) + HIGHLIGHT_MS > now;
     li.classList.toggle('is-active', active);
     li.classList.toggle('is-next', cue === next);
+
+    // The left cell counts down to this cue, then falls back to showing the
+    // cue's own timestamp once it has gone by. Only rewrite when the displayed
+    // value actually changes, otherwise every frame would touch the DOM.
+    const away = cue.t - cur;
+    const upcoming = away > EPS;
+    const label = upcoming
+      ? away >= 10
+        ? `in ${Math.round(away)}s`
+        : `in ${away.toFixed(1)}s`
+      : formatTime(cue.t);
+
+    li.classList.toggle('is-past', !upcoming);
+    if (li.dataset.label !== label) {
+      li.dataset.label = label;
+      const cell = li.querySelector('.cue-t');
+      if (cell) cell.textContent = label;
+    }
   }
 }
 
@@ -628,6 +755,8 @@ function buildCueList() {
       sound.className = 'cue-sound';
       sound.textContent = cue.sound ?? DEFAULT_SOUND;
 
+      // The left cell doubles as this cue's countdown while it is still
+      // upcoming; render() rewrites it as the timer runs.
       li.append(time, text, sound);
     }
     el.cueList.append(li);
@@ -692,6 +821,9 @@ function bindHold(button, fn) {
 
 function setMuted(next) {
   muted = next;
+  // Gain-based so sounds already queued on the audio clock survive the mute
+  // and play the moment it is lifted.
+  audio.setVolume(muted ? 0 : MASTER_GAIN);
   el.soundToggle.setAttribute('aria-pressed', String(muted));
   el.soundToggleLabel.textContent = muted ? 'Muted' : 'Sound on';
 }
@@ -739,7 +871,10 @@ function onKeydown(event) {
  */
 function tick(now = performance.now()) {
   const cur = current(now);
-  if (running) processCrossings(cur, now);
+  if (running) {
+    queueUpcomingCues(cur);
+    processCrossings(cur, now);
+  }
   render(cur, now);
 }
 

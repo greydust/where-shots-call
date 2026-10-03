@@ -425,7 +425,7 @@ kbd {
 
 .cue {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 62px 1fr auto;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
@@ -438,11 +438,19 @@ kbd {
   border-top: 0;
 }
 
+/* Left cell. Holds the countdown to this cue while it is upcoming, then the
+   cue's own timestamp once it has passed. Fixed width so the text beside it
+   does not shift as the digits change. */
 .cue-t {
-  color: var(--muted);
+  color: var(--accent);
   font-family: "Consolas", "SF Mono", "Roboto Mono", ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cue.is-past .cue-t {
+  color: var(--muted);
 }
 
 .cue-text {
@@ -469,7 +477,7 @@ kbd {
 }
 
 .cue.is-next .cue-t {
-  color: var(--accent);
+  font-weight: 700;
 }
 
 .cue.is-active {
