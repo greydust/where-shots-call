@@ -35,17 +35,11 @@ const AUDIO_LOOKAHEAD = 120;
 const MASTER_GAIN = 0.5;
 
 /**
- * Hold this long before nudge buttons start auto-repeating, and how often they
- * repeat afterwards.
- *
- * These were originally 420ms / 90ms, which was far too eager: an ordinary
- * mouse or finger press often lasts ~600-700ms, so a single tap on "+1s" would
- * land mid-repeat and add three or four seconds instead of one. At 650ms a
- * deliberate press is required to start repeating, and 160ms is slow enough to
- * stay under control while scrubbing time.
+ * Hold this long before the +/-10s buttons start auto-repeating, and how often
+ * they repeat afterwards. Only the 10s step repeats at all -- see bindHold.
  */
 const HOLD_DELAY_MS = 650;
-const HOLD_REPEAT_MS = 160;
+const HOLD_REPEAT_MS = 220;
 
 const DEFAULT_SOUND = 'chime';
 
@@ -792,19 +786,18 @@ function selectPreset(index) {
 /* Input                                                               */
 /* ------------------------------------------------------------------ */
 
-/** Press to nudge once, hold to nudge continuously. */
-function bindHold(button, fn) {
+/**
+ * Wire a nudge button.
+ *
+ * `repeat` enables hold-to-repeat. It is only worth having on the big steps:
+ * holding to scrub 0.5s at a time has no use, and it was a persistent source
+ * of overshoot, because a normal press (~600-700ms) is long enough to slip past
+ * any delay that still allows repeating at a comfortable rate. The small steps
+ * therefore fire exactly once per press, always.
+ */
+function bindHold(button, fn, { repeat = false } = {}) {
   let holdTimer = 0;
   let repeatTimer = 0;
-
-  /**
-   * When the last pointerdown landed. A pointer press already nudges on
-   * pointerdown, so the click that follows must not nudge again -- but a sticky
-   * "was this a pointer?" flag used to get stranded when a press never produced
-   * a click (drag off and release, cancelled gesture), which then swallowed the
-   * next keyboard activation. Comparing timestamps cannot go stale.
-   */
-  let lastPointerAt = -Infinity;
 
   const stop = () => {
     window.clearTimeout(holdTimer);
@@ -814,8 +807,8 @@ function bindHold(button, fn) {
 
   button.addEventListener('pointerdown', (event) => {
     event.preventDefault();
-    lastPointerAt = performance.now();
     fn();
+    if (!repeat) return;
     holdTimer = window.setTimeout(() => {
       repeatTimer = window.setInterval(fn, HOLD_REPEAT_MS);
     }, HOLD_DELAY_MS);
@@ -825,9 +818,14 @@ function bindHold(button, fn) {
     button.addEventListener(type, stop);
   }
 
-  // Keyboard activation arrives as a click with no recent pointerdown.
-  button.addEventListener('click', () => {
-    if (performance.now() - lastPointerAt < 1000) return;
+  // A pointer press already nudged on pointerdown, so its trailing click must
+  // not nudge again. Keyboard activation (Enter/Space) also arrives as a click,
+  // but with detail === 0 -- pointer-generated clicks always report detail >= 1.
+  // Testing detail replaces both the old sticky flag, which went stranded when a
+  // press produced no click, and a timing heuristic, which double-counted any
+  // press held past its window.
+  button.addEventListener('click', (event) => {
+    if (event.detail !== 0) return;
     fn();
   });
 }
@@ -907,7 +905,8 @@ function init() {
   el.resetPresetBtn.addEventListener('click', resetPreset);
 
   for (const btn of el.nudgeBtns) {
-    bindHold(btn, () => nudge(Number(btn.dataset.delta)));
+    const delta = Number(btn.dataset.delta);
+    bindHold(btn, () => nudge(delta), { repeat: Math.abs(delta) >= 10 });
   }
 
   window.addEventListener('keydown', onKeydown);
