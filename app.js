@@ -34,9 +34,18 @@ const AUDIO_LOOKAHEAD = 120;
 /** Volume the synth runs at when sound is not muted. */
 const MASTER_GAIN = 0.5;
 
-/** Hold this long before nudge buttons start auto-repeating. */
-const HOLD_DELAY_MS = 420;
-const HOLD_REPEAT_MS = 90;
+/**
+ * Hold this long before nudge buttons start auto-repeating, and how often they
+ * repeat afterwards.
+ *
+ * These were originally 420ms / 90ms, which was far too eager: an ordinary
+ * mouse or finger press often lasts ~600-700ms, so a single tap on "+1s" would
+ * land mid-repeat and add three or four seconds instead of one. At 650ms a
+ * deliberate press is required to start repeating, and 160ms is slow enough to
+ * stay under control while scrubbing time.
+ */
+const HOLD_DELAY_MS = 650;
+const HOLD_REPEAT_MS = 160;
 
 const DEFAULT_SOUND = 'chime';
 
@@ -787,7 +796,15 @@ function selectPreset(index) {
 function bindHold(button, fn) {
   let holdTimer = 0;
   let repeatTimer = 0;
-  let fromPointer = false;
+
+  /**
+   * When the last pointerdown landed. A pointer press already nudges on
+   * pointerdown, so the click that follows must not nudge again -- but a sticky
+   * "was this a pointer?" flag used to get stranded when a press never produced
+   * a click (drag off and release, cancelled gesture), which then swallowed the
+   * next keyboard activation. Comparing timestamps cannot go stale.
+   */
+  let lastPointerAt = -Infinity;
 
   const stop = () => {
     window.clearTimeout(holdTimer);
@@ -797,7 +814,7 @@ function bindHold(button, fn) {
 
   button.addEventListener('pointerdown', (event) => {
     event.preventDefault();
-    fromPointer = true;
+    lastPointerAt = performance.now();
     fn();
     holdTimer = window.setTimeout(() => {
       repeatTimer = window.setInterval(fn, HOLD_REPEAT_MS);
@@ -808,13 +825,9 @@ function bindHold(button, fn) {
     button.addEventListener(type, stop);
   }
 
-  // Keyboard activation still arrives as a click, so ignore the click that
-  // follows a pointer press to avoid firing twice.
+  // Keyboard activation arrives as a click with no recent pointerdown.
   button.addEventListener('click', () => {
-    if (fromPointer) {
-      fromPointer = false;
-      return;
-    }
+    if (performance.now() - lastPointerAt < 1000) return;
     fn();
   });
 }
